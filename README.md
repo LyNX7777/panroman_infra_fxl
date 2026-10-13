@@ -2,30 +2,32 @@
 
 This repository provisions a deliberately small public web application on AWS:
 
-- one dedicated VPC and one public subnet in one Availability Zone;
+- one dedicated VPC and two public subnets in different Availability Zones;
 - one EC2 instance running Docker;
-- one Elastic IP retained across EC2 replacements;
+- one internet-facing Application Load Balancer (ALB);
 - one Nginx container serving app/index.html;
-- one apex A record in the existing public panroman.pl hosted zone;
-- one DNS-validated, non-exportable ACM certificate reserved for later use;
+- one apex A alias to the ALB in the existing public panroman.pl hosted zone;
+- one DNS-validated, non-exportable ACM certificate terminating HTTPS at the ALB;
 - one S3 bucket for application remote state and native S3 lockfiles;
 - one GitHub Actions role authenticated through GitHub OIDC.
 
-It does not create a NAT gateway, load balancer, database, DNS zone, SSH access,
-SSM access, or long-lived GitHub AWS credentials. The website remains HTTP-only;
-requesting the ACM certificate does not configure HTTPS on Nginx.
+Traffic follows `Browser -> HTTPS -> ALB + ACM -> HTTP:80 -> Nginx`.
+The ALB redirects public HTTP to HTTPS. EC2 accepts HTTP only from the ALB's
+security group and retains an automatically assigned public IPv4 address for
+package and container downloads. There is no Elastic IP, NAT gateway, database,
+new DNS zone, SSH access, SSM access, or long-lived GitHub AWS credential.
 
 ## Module layout
 
 The bootstrap and infrastructure directories are composition roots. Provider,
 backend, account, and regional configuration remain in those roots. Reusable
-AWS resources are grouped into five local modules:
+AWS resources are grouped into six local modules:
 
 - modules/terraform-state manages the protected S3 state bucket;
 - modules/github-oidc manages GitHub federation and deployment permissions;
-- modules/network manages the single-AZ public network;
-- modules/web-server manages the EC2 instance, Elastic IP and association,
-  security group, and Docker bootstrap template;
+- modules/network manages the two-AZ public network;
+- modules/web-server manages the EC2 instance, security group, and Docker bootstrap;
+- modules/load-balancer manages the ALB, listeners, HTTP target group and registration;
 - modules/dns-certificate manages the application A record and ACM certificate,
   and reads the externally managed zone and existing validation records.
 
@@ -37,7 +39,7 @@ module owns the EC2 user-data rendering.
 
 - An existing AWS account.
 - A local AWS profile with permission to manage S3, IAM, EC2, VPC, Route 53
-  records, and ACM certificates.
+  records, ACM certificates, and Elastic Load Balancing resources.
 - The existing public panroman.pl zone, delegated to its Route 53 name servers,
   with the existing ACM DNS validation CNAME intact.
 - Terraform 1.10 or newer. The workflow currently uses Terraform 1.16.2.
@@ -172,10 +174,19 @@ terraform -chdir=bootstrap plan -out=bootstrap.tfplan
 terraform -chdir=bootstrap apply bootstrap.tfplan
 ~~~
 
-The policy update adds Elastic IP operations, Route 53 reads and changes limited
-to the selected zone's apex A record, and regional ACM permissions. Certificate
-requests are limited to the selected domain and DNS validation. GitHub Actions
-does not apply bootstrap changes.
+The policy update adds regional ELB lifecycle permissions and permission to create
+only the ELB service-linked role. EIP disassociation/release permissions remain
+for migration; allocation/association permissions are removed. Route 53 changes
+remain limited to the selected zone's apex A record, and certificate requests
+remain limited to the selected domain and DNS validation. GitHub Actions does
+not apply bootstrap changes.
+
+For the migration from direct HTTP, review a fresh infrastructure plan before
+pushing. It should add the second subnet and ALB, update the apex A record to an
+alias, restrict EC2 ingress, and remove the EIP and association. The VPC, original
+subnet, EC2 instance, and ACM certificate retain their Terraform addresses.
+There is no staged cutover: downtime is accepted during provisioning and expiry
+of the old 300-second DNS cache. Do not apply previously saved EIP-era plans.
 
 Initialize this directory as a repository if needed, add the GitHub remote, and
 push the code to main. Pull requests run formatting and validation. A push to
@@ -187,6 +198,8 @@ main, including a merged pull request, performs these serialized steps:
 4. Save a Terraform plan.
 5. Apply that exact saved plan automatically.
 6. Publish the Terraform outputs in the workflow summary.
+7. Wait for a healthy target, verify HTTPS content and the HTTP redirect, and
+   require a fresh Terraform plan to report no changes.
 
 The workflow can also be started manually with workflow_dispatch. It never
 applies code from a pull request.
@@ -195,10 +208,12 @@ applies code from a pull request.
 
 The hosted zone is read by ID and is never imported, created, or destroyed by
 this project. Its apex must match domain_name and it must be public. Terraform
-creates panroman.pl's A record with TTL 300, pointing to the Elastic IP.
+manages panroman.pl's A alias pointing to the ALB with target health evaluation.
+Alias TTL is controlled by AWS, so no explicit TTL or address list is configured.
 Overwrite is disabled: if an A record already exists before the first apply,
 review its ownership and deliberately import/reconcile it before retrying.
-No www, wildcard, AAAA, alias, or additional zone is created.
+No www, wildcard, AAAA, or additional zone is created. The existing managed A
+record is updated in place during migration.
 
 The existing validation CNAME
 `_57afa9f5023454ac2dc5debb27ec40b2.panroman.pl.` points to
@@ -211,11 +226,13 @@ process; this project neither overwrites nor takes ownership of it.
 
 ACM requests an RSA-2048, DNS-validated, non-exportable certificate in the
 application region (eu-central-1 by default). Apply waits for issuance. The
-certificate_arn output refers to the validated certificate. No private keys
-are exported, port 443 is not opened, and HTTP is not redirected.
+certificate_arn output refers to the validated certificate. The ALB HTTPS
+listener waits for validation and uses `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09`
+(TLS 1.2/1.3). No private keys are exported. Public port 80 returns a 301 redirect
+to HTTPS, preserving the host, path, and query. DNS publication waits for the
+listeners and target registration; target health can take longer to become ready.
 
-An unused standard ACM certificate is not guaranteed automatic renewal just
-because its validation CNAME remains present. See
+Keep the externally managed validation CNAME intact for ACM renewal. See
 [ACM renewal eligibility](https://docs.aws.amazon.com/acm/latest/userguide/managed-renewal.html)
 and [DNS validation reuse](https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html).
 
@@ -246,31 +263,41 @@ Invoke-WebRequest $applicationUrl
 ~~~
 
 Cloud-init must install Docker and download the Nginx image on the first boot,
-so HTTP can take several minutes to become available. Port 80 is public. Port
-22 is not opened and no EC2 key pair or instance role is created.
+so the ALB target can take several minutes to become healthy. Ports 80 and 443
+are public only on the ALB; the EC2 security group permits HTTP only from the ALB.
+Port 22 is not opened and no EC2 key pair or instance role is created.
 
-The first Elastic IP deployment changes the public address once. Changing
-app/index.html subsequently replaces the disposable instance, but its Elastic
-IP and panroman.pl A record remain stable. There is still downtime while the
-replacement boots. Package installation and image downloads each retry up to
-10 times, with 15 seconds between attempts, to tolerate IP attachment during boot.
+Changing app/index.html replaces the disposable instance and updates the target
+registration, while the ALB, DNS alias, and certificate remain stable. The single
+instance still has downtime during replacement. Package installation and image
+downloads each retry up to 10 times, with 15 seconds between attempts. The legacy
+EIP comment in the bootstrap script is retained to avoid replacing the instance
+solely for a comment change during this migration.
 
-The application_url output is http://panroman.pl; direct_application_url uses
-the Elastic IP. Verify DNS and certificate issuance:
+The application_url output is https://panroman.pl. The old public_ip and
+direct_application_url outputs have been removed. Verify DNS, certificate, and
+target health:
 
 ~~~powershell
 Resolve-DnsName panroman.pl -Type NS
 Resolve-DnsName panroman.pl -Type A
-$publicIp = terraform -chdir=infrastructure output -raw public_ip
+$albDnsName = terraform -chdir=infrastructure output -raw alb_dns_name
+$targetGroupArn = terraform -chdir=infrastructure output -raw target_group_arn
 $certificateArn = terraform -chdir=infrastructure output -raw certificate_arn
 aws acm describe-certificate --certificate-arn $certificateArn --region eu-central-1 --profile my-aws-profile --query Certificate.Status
+aws elbv2 describe-target-health --target-group-arn $targetGroupArn --region eu-central-1 --profile my-aws-profile
+curl.exe -I "http://panroman.pl/example?check=1"
+curl.exe --fail https://panroman.pl/
 ~~~
 
-The A answer must equal $publicIp and ACM must report ISSUED. For a replacement
-check, record instance_id, public_ip, and certificate_arn, change app/index.html,
-and deploy through GitHub Actions. Confirm only the instance ID changes among
-those outputs, HTTP serves the updated HTML, and a subsequent plan reports no
-changes. A newly published latest AMI can independently trigger replacement.
+ACM must report ISSUED, the target must report healthy, and HTTP must redirect
+to https://panroman.pl:443/example?check=1 (an omitted default port is equivalent).
+HTTPS must serve app/index.html with a valid certificate. Check the Route 53
+record's AliasTarget against the ALB DNS name; individual resolved addresses can
+change. Confirm the former EIP allocation is gone and that HTTP requests to the
+instance's current public IP time out. Finally, a fresh Terraform plan should
+report no changes. A newly published latest AMI can independently trigger
+replacement and should be reviewed separately.
 
 Offline checks used by CI:
 
@@ -278,14 +305,18 @@ Offline checks used by CI:
 terraform fmt -check -recursive
 terraform -chdir=bootstrap init -backend=false
 terraform -chdir=bootstrap validate
+terraform -chdir=bootstrap test
 terraform -chdir=infrastructure init -backend=false
 terraform -chdir=infrastructure validate
 terraform -chdir=infrastructure test
 ~~~
 
-The tests use a mocked AWS provider and exercise matching, normalized, missing,
-wrong-name, wrong-type, and conflicting validation records, plus an unrelated
-hosted zone. They create no AWS resources.
+Infrastructure tests use a mocked AWS provider and exercise certificate validation,
+DNS aliases, the complete dependency graph, two Availability Zones, listeners,
+target registration, and security-group restrictions. Bootstrap tests compute IAM
+policy documents locally using fake credentials with AWS lookups disabled. They
+run plans only and verify regional ELB permissions and EIP cleanup permissions.
+The tests create no AWS resources.
 
 ## Design and security notes
 
@@ -293,20 +324,21 @@ hosted zone. They create no AWS resources.
   plan time.
 - IMDSv2 is required and the root EBS volume is encrypted.
 - The GitHub role can access only the application state object and lockfile.
-- EC2 write permissions are limited to the operations required by this stack
+- EC2 and ELB write permissions are limited to the operations required by this stack
   and to eu-central-1. Read-only EC2 Describe operations are needed by the AWS
   provider.
 - No shell access is configured. Replace the instance through Terraform instead
   of modifying it manually.
-- The site is HTTP-only and single-instance. It is not a production
+- The site uses HTTPS and is single-instance. It is not a production
   high-availability design.
 
 ## Cost and teardown
 
-The EC2 instance, EBS volume, public IPv4 address, S3 storage, and network data
-transfer can incur AWS charges. An internet gateway has no hourly charge, but
-traffic charges can still apply. There is no automatic destroy workflow.
-The Elastic IP is charged while allocated, including while unattached.
+The EC2 instance, EBS volume, ALB hours and capacity units, public IPv4 addresses
+on the ALB and instance, S3 storage, and network data transfer can incur AWS
+charges. Removing the Elastic IP does not remove public IPv4 charges. An internet
+gateway has no hourly charge, but traffic charges can still apply. There is no
+automatic destroy workflow.
 
 Destroy resources in this order:
 
@@ -316,10 +348,10 @@ Destroy resources in this order:
 terraform -chdir=infrastructure destroy
 ~~~
 
-This releases the Elastic IP and deletes the application A record and ACM
-certificate. The hosted zone, NS/SOA records, and pre-existing ACM validation
-CNAME remain externally managed and are retained. A later fresh deployment gets
-a new Elastic IP; preserving it across full teardown is outside this design.
+This deletes the ALB, listeners, target group, instance, network, application A
+alias, and ACM certificate. The hosted zone, NS/SOA records, and pre-existing ACM
+validation CNAME remain externally managed and are retained. The shared AWS ELB
+service-linked role is not managed or deleted by this project.
 
 2. Confirm the authoritative bootstrap state is still present. Stop if this
    returns False:

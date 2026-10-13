@@ -1,3 +1,13 @@
+variable "secondary_public_subnet_cidr" {
+  description = "IPv4 CIDR for the public subnet in the second Availability Zone."
+  type        = string
+
+  validation {
+    condition     = can(cidrnetmask(var.secondary_public_subnet_cidr))
+    error_message = "secondary_public_subnet_cidr must be a valid IPv4 CIDR block."
+  }
+}
+
 variable "project_name" {
   description = "Project name used for resource names and tags."
   type        = string
@@ -22,4 +32,3 @@ variable "public_subnet_cidr" {
     error_message = "public_subnet_cidr must be a valid IPv4 CIDR block."
   }
 }
-

@@ -33,7 +33,8 @@ mock_provider "aws" {
 variables {
   hosted_zone_id = "Z09698437FJB59WM71X"
   domain_name    = "panroman.pl"
-  public_ip      = "192.0.2.10"
+  alb_dns_name   = "demo.eu-central-1.elb.amazonaws.com"
+  alb_zone_id    = "Z215JYRZR1TBD5"
 }
 
 run "matching_external_validation_record" {
@@ -47,11 +48,14 @@ run "matching_external_validation_record" {
     condition = (
       aws_route53_record.application.name == "panroman.pl" &&
       aws_route53_record.application.type == "A" &&
-      aws_route53_record.application.ttl == 300 &&
-      aws_route53_record.application.records == toset(["192.0.2.10"]) &&
+      aws_route53_record.application.ttl == null &&
+      aws_route53_record.application.records == null &&
+      one(aws_route53_record.application.alias).name == var.alb_dns_name &&
+      one(aws_route53_record.application.alias).zone_id == var.alb_zone_id &&
+      one(aws_route53_record.application.alias).evaluate_target_health &&
       aws_route53_record.application.allow_overwrite == false
     )
-    error_message = "Publish only the intended apex A record without overwriting existing DNS."
+    error_message = "Publish only the intended apex ALB alias without overwriting existing DNS."
   }
 
   assert {

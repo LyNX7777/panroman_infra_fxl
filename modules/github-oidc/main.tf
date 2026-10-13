@@ -109,8 +109,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     sid    = "ManageDemoEC2AndNetwork"
     effect = "Allow"
     actions = [
-      "ec2:AllocateAddress",
-      "ec2:AssociateAddress",
       "ec2:AssociateRouteTable",
       "ec2:AttachInternetGateway",
       "ec2:AuthorizeSecurityGroupEgress",
@@ -246,6 +244,7 @@ data "aws_iam_policy_document" "deployment_permissions" {
   source_policy_documents = [
     data.aws_iam_policy_document.github_actions_permissions.json,
     data.aws_iam_policy_document.dns_certificate_permissions.json,
+    data.aws_iam_policy_document.load_balancer_permissions.json,
   ]
 }
 

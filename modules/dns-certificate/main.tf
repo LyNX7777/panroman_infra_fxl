@@ -23,9 +23,13 @@ resource "aws_route53_record" "application" {
   zone_id         = data.aws_route53_zone.existing.zone_id
   name            = local.domain_name
   type            = "A"
-  ttl             = 300
-  records         = [var.public_ip]
   allow_overwrite = false
+
+  alias {
+    name                   = var.alb_dns_name
+    zone_id                = var.alb_zone_id
+    evaluate_target_health = true
+  }
 }
 
 resource "aws_acm_certificate" "application" {

@@ -24,6 +24,8 @@ data "aws_ami" "amazon_linux_2023" {
 }
 
 resource "aws_security_group" "web" {
+  # Preserve the immutable legacy description to avoid replacing the group.
+  # The separate ingress rule below limits HTTP to the ALB.
   name        = "${var.project_name}-web"
   description = "Allow public HTTP traffic to the demo web server"
   vpc_id      = var.vpc_id
@@ -34,12 +36,12 @@ resource "aws_security_group" "web" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "http" {
-  security_group_id = aws_security_group.web.id
-  description       = "Public HTTP"
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 80
-  ip_protocol       = "tcp"
-  to_port           = 80
+  security_group_id            = aws_security_group.web.id
+  description                  = "HTTP from the application load balancer only"
+  referenced_security_group_id = var.load_balancer_security_group_id
+  from_port                    = 80
+  ip_protocol                  = "tcp"
+  to_port                      = 80
 }
 
 resource "aws_vpc_security_group_egress_rule" "all" {
@@ -47,19 +49,6 @@ resource "aws_vpc_security_group_egress_rule" "all" {
   description       = "Package installation and container image download"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
-}
-
-resource "aws_eip" "web" {
-  domain = "vpc"
-
-  tags = {
-    Name = "${var.project_name}-web"
-  }
-}
-
-resource "aws_eip_association" "web" {
-  allocation_id = aws_eip.web.id
-  instance_id   = aws_instance.web.id
 }
 
 resource "aws_instance" "web" {

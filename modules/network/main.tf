@@ -44,6 +44,22 @@ resource "aws_route_table" "public" {
   }
 }
 
+resource "aws_subnet" "public_secondary" {
+  vpc_id                  = aws_vpc.demo.id
+  cidr_block              = var.secondary_public_subnet_cidr
+  availability_zone       = data.aws_availability_zones.available.names[1]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "${var.project_name}-public-secondary"
+  }
+}
+
+resource "aws_route_table_association" "public_secondary" {
+  subnet_id      = aws_subnet.public_secondary.id
+  route_table_id = aws_route_table.public.id
+}
+
 resource "aws_route" "internet" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
@@ -54,4 +70,3 @@ resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
-

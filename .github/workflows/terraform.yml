@@ -54,7 +54,7 @@ jobs:
       - name: Validate bootstrap
         run: terraform -chdir=bootstrap validate
 
-      - name: Test OIDC trust policy without AWS access
+      - name: Test deployment permissions without AWS access
         run: terraform -chdir=bootstrap test
 
       - name: Initialize infrastructure without a backend
@@ -63,7 +63,7 @@ jobs:
       - name: Validate infrastructure
         run: terraform -chdir=infrastructure validate
 
-      - name: Test DNS and certificate validation without AWS access
+      - name: Test HTTPS infrastructure without AWS access
         run: terraform -chdir=infrastructure test
 
   deploy:
@@ -122,3 +122,21 @@ jobs:
             terraform -chdir=infrastructure output -no-color
             echo '~~~'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify HTTPS and healthy Nginx target
+        timeout-minutes: 15
+        run: |
+          target_group_arn=$(terraform -chdir=infrastructure output -raw target_group_arn)
+          application_url=$(terraform -chdir=infrastructure output -raw application_url)
+          aws elbv2 wait target-in-service --target-group-arn "$target_group_arn"
+          curl --fail --silent --show-error --retry 30 --retry-delay 10 --retry-all-errors \
+            "$application_url/" -o /tmp/deployed-index.html
+          cmp app/index.html /tmp/deployed-index.html
+          http_url="${application_url/https:/http:}/example?check=1"
+          curl --silent --show-error --dump-header /tmp/redirect-headers --output /dev/null "$http_url"
+          tr -d '\r' < /tmp/redirect-headers > /tmp/redirect-headers-clean
+          grep -Eq '^HTTP/[0-9.]+ 301' /tmp/redirect-headers-clean
+          grep -Fqi "location: $application_url:443/example?check=1" /tmp/redirect-headers-clean
+
+      - name: Verify Terraform convergence
+        run: terraform -chdir=infrastructure plan -input=false -detailed-exitcode

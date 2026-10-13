@@ -8,7 +8,12 @@ variable "domain_name" {
   type        = string
 }
 
-variable "public_ip" {
-  description = "Elastic IPv4 address to publish in the apex A record."
+variable "alb_dns_name" {
+  description = "DNS name of the ALB with its HTTPS listener ready."
+  type        = string
+}
+
+variable "alb_zone_id" {
+  description = "ALB canonical hosted zone ID used by the Route 53 alias."
   type        = string
 }

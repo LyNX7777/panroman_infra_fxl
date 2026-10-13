@@ -1,3 +1,14 @@
+variable "secondary_public_subnet_cidr" {
+  description = "IPv4 CIDR for the second public subnet required by the ALB."
+  type        = string
+  default     = "10.0.2.0/24"
+
+  validation {
+    condition     = can(cidrnetmask(var.secondary_public_subnet_cidr))
+    error_message = "secondary_public_subnet_cidr must be a valid IPv4 CIDR block."
+  }
+}
+
 variable "hosted_zone_id" {
   description = "ID of the externally managed public Route 53 hosted zone; keep both roots aligned."
   type        = string
@@ -72,7 +83,7 @@ variable "vpc_cidr" {
 }
 
 variable "public_subnet_cidr" {
-  description = "IPv4 CIDR block for the single public subnet."
+  description = "IPv4 CIDR block for the original public subnet hosting EC2."
   type        = string
   default     = "10.0.1.0/24"
 

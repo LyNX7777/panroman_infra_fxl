@@ -1,3 +1,8 @@
+variable "load_balancer_security_group_id" {
+  description = "ALB security group allowed to connect to Nginx on port 80."
+  type        = string
+}
+
 variable "project_name" {
   description = "Project name used for resource names and tags."
   type        = string
@@ -32,4 +37,3 @@ variable "index_html_content" {
     error_message = "index_html_content must not be empty."
   }
 }
-
