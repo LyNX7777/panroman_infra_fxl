@@ -49,6 +49,19 @@ resource "aws_vpc_security_group_egress_rule" "all" {
   ip_protocol       = "-1"
 }
 
+resource "aws_eip" "web" {
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-web"
+  }
+}
+
+resource "aws_eip_association" "web" {
+  allocation_id = aws_eip.web.id
+  instance_id   = aws_instance.web.id
+}
+
 resource "aws_instance" "web" {
   ami                         = data.aws_ami.amazon_linux_2023.id
   instance_type               = var.instance_type
@@ -77,4 +90,3 @@ resource "aws_instance" "web" {
     Name = "${var.project_name}-web"
   }
 }
-

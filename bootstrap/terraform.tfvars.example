@@ -13,6 +13,9 @@ github_repository_ids = {
 # For a repository still using legacy name-only subjects, omit this object.
 
 # Optional overrides:
+# hosted_zone_id = "Z09698437FJB59WM71X"
+# domain_name    = "panroman.pl"
+# Keep these DNS values identical in bootstrap and infrastructure.
 # aws_region    = "eu-central-1"
 # github_branch = "main"
 # project_name  = "simpleproj1"

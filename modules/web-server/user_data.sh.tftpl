@@ -1,14 +1,29 @@
 #!/bin/bash
 set -euxo pipefail
 
-dnf install -y docker
+# Elastic IP association can interrupt connections during the first boot.
+retry() {
+  local attempt
+  for attempt in {1..10}; do
+    if "$@"; then
+      return 0
+    fi
+    if [ "$attempt" -lt 10 ]; then
+      sleep 15
+    fi
+  done
+  echo "Command failed after 10 attempts: $*" >&2
+  return 1
+}
+
+retry dnf install -y docker
 systemctl enable --now docker
 
 install -d -m 0755 /opt/simpleproj1
 echo '${index_html_base64}' | base64 --decode > /opt/simpleproj1/index.html
 chmod 0644 /opt/simpleproj1/index.html
 
-docker pull nginx:stable-alpine
+retry docker pull nginx:stable-alpine
 docker run \
   --detach \
   --name simpleproj1-nginx \
@@ -16,4 +31,3 @@ docker run \
   --restart unless-stopped \
   --volume /opt/simpleproj1:/usr/share/nginx/html:ro,Z \
   nginx:stable-alpine
-

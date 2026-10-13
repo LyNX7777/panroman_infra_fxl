@@ -109,6 +109,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     sid    = "ManageDemoEC2AndNetwork"
     effect = "Allow"
     actions = [
+      "ec2:AllocateAddress",
+      "ec2:AssociateAddress",
       "ec2:AssociateRouteTable",
       "ec2:AttachInternetGateway",
       "ec2:AuthorizeSecurityGroupEgress",
@@ -128,12 +130,14 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:DeleteTags",
       "ec2:DeleteVpc",
       "ec2:DetachInternetGateway",
+      "ec2:DisassociateAddress",
       "ec2:DisassociateRouteTable",
       "ec2:ModifyInstanceAttribute",
       "ec2:ModifySecurityGroupRules",
       "ec2:ModifySubnetAttribute",
       "ec2:ModifyVpcAttribute",
       "ec2:RebootInstances",
+      "ec2:ReleaseAddress",
       "ec2:ReplaceRouteTableAssociation",
       "ec2:RevokeSecurityGroupEgress",
       "ec2:RevokeSecurityGroupIngress",
@@ -154,8 +158,99 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 }
 
+# Route 53 is global; do not apply the EC2 RequestedRegion condition here.
+data "aws_iam_policy_document" "dns_certificate_permissions" {
+  statement {
+    sid    = "ReadExistingHostedZone"
+    effect = "Allow"
+    actions = [
+      "route53:GetHostedZone",
+      "route53:ListResourceRecordSets",
+      "route53:ListTagsForResource",
+    ]
+    resources = ["arn:aws:route53:::hostedzone/${var.hosted_zone_id}"]
+  }
+
+  statement {
+    sid       = "ManageApplicationARecord"
+    effect    = "Allow"
+    actions   = ["route53:ChangeResourceRecordSets"]
+    resources = ["arn:aws:route53:::hostedzone/${var.hosted_zone_id}"]
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "route53:ChangeResourceRecordSetsNormalizedRecordNames"
+      values   = [trimsuffix(lower(var.domain_name), ".")]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "route53:ChangeResourceRecordSetsRecordTypes"
+      values   = ["A"]
+    }
+  }
+
+  statement {
+    sid       = "WaitForDNSChanges"
+    effect    = "Allow"
+    actions   = ["route53:GetChange"]
+    resources = ["arn:aws:route53:::change/*"]
+  }
+
+  statement {
+    sid       = "RequestApplicationCertificate"
+    effect    = "Allow"
+    actions   = ["acm:RequestCertificate"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "acm:DomainNames"
+      values   = [trimsuffix(lower(var.domain_name), ".")]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "acm:ValidationMethod"
+      values   = ["DNS"]
+    }
+  }
+
+  statement {
+    sid    = "ManageApplicationRegionCertificates"
+    effect = "Allow"
+    actions = [
+      "acm:AddTagsToCertificate",
+      "acm:DeleteCertificate",
+      "acm:DescribeCertificate",
+      "acm:ListTagsForCertificate",
+      "acm:RemoveTagsFromCertificate",
+    ]
+    resources = ["arn:aws:acm:${var.aws_region}:${var.aws_account_id}:certificate/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "deployment_permissions" {
+  source_policy_documents = [
+    data.aws_iam_policy_document.github_actions_permissions.json,
+    data.aws_iam_policy_document.dns_certificate_permissions.json,
+  ]
+}
+
 resource "aws_iam_role_policy" "github_actions" {
   name   = "${var.project_name}-terraform-deployment"
   role   = aws_iam_role.github_actions.id
-  policy = data.aws_iam_policy_document.github_actions_permissions.json
+  policy = data.aws_iam_policy_document.deployment_permissions.json
 }

@@ -17,3 +17,11 @@ module "web_server" {
 
   depends_on = [module.network]
 }
+
+module "dns_certificate" {
+  source = "../modules/dns-certificate"
+
+  hosted_zone_id = var.hosted_zone_id
+  domain_name    = var.domain_name
+  public_ip      = module.web_server.public_ip
+}

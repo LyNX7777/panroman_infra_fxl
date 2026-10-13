@@ -63,6 +63,9 @@ jobs:
       - name: Validate infrastructure
         run: terraform -chdir=infrastructure validate
 
+      - name: Test DNS and certificate validation without AWS access
+        run: terraform -chdir=infrastructure test
+
   deploy:
     name: Plan and apply infrastructure
     if: github.event_name != 'pull_request'
@@ -76,6 +79,8 @@ jobs:
     env:
       TF_VAR_aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
       TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_hosted_zone_id: ${{ vars.HOSTED_ZONE_ID || 'Z09698437FJB59WM71X' }}
+      TF_VAR_domain_name: ${{ vars.DOMAIN_NAME || 'panroman.pl' }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
 
     steps:

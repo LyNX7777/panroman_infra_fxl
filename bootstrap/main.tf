@@ -18,6 +18,9 @@ module "github_oidc" {
   github_repository_ids = var.github_repository_ids
   github_branch         = var.github_branch
   aws_region            = var.aws_region
+  aws_account_id        = var.aws_account_id
+  hosted_zone_id        = var.hosted_zone_id
+  domain_name           = var.domain_name
   state_bucket_arn      = module.terraform_state.bucket_arn
   application_state_key = local.application_state_key
 }

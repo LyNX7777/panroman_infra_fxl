@@ -1,3 +1,25 @@
+variable "hosted_zone_id" {
+  description = "ID of the externally managed public Route 53 hosted zone; keep both roots aligned."
+  type        = string
+  default     = "Z09698437FJB59WM71X"
+
+  validation {
+    condition     = can(regex("^Z[A-Z0-9]+$", var.hosted_zone_id))
+    error_message = "hosted_zone_id must be a Route 53 zone ID without the /hostedzone/ prefix."
+  }
+}
+
+variable "domain_name" {
+  description = "Apex domain for the application and certificate; keep both roots aligned."
+  type        = string
+  default     = "panroman.pl"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.domain_name))
+    error_message = "domain_name must be a lowercase DNS name without a wildcard or trailing dot."
+  }
+}
+
 variable "aws_account_id" {
   description = "The 12-digit AWS account ID in which resources may be created."
   type        = string

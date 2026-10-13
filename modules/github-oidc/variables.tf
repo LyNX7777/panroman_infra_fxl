@@ -1,3 +1,18 @@
+variable "aws_account_id" {
+  description = "AWS account containing the application certificate."
+  type        = string
+}
+
+variable "hosted_zone_id" {
+  description = "Existing Route 53 zone in which only the application A record may be managed."
+  type        = string
+}
+
+variable "domain_name" {
+  description = "Apex domain allowed for DNS updates and ACM certificate requests."
+  type        = string
+}
+
 variable "project_name" {
   description = "Project name used for IAM role and policy names."
   type        = string
