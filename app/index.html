@@ -1,36 +1,163 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SimpleProj1</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: system-ui, sans-serif;
-      }
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>This web page puppet is served by Nginx in Docker on an AWS EC2 instance
+  through Route53 with ACM (hopefully) and GoDaddy, deployed via github actions and managed by Terraform.
+  
+  Pan Roman – Master of Many Paths</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-      body {
-        align-items: center;
-        display: flex;
-        justify-content: center;
-        margin: 0;
-        min-height: 100vh;
-      }
+  body {
+    background: #0d0d0d;
+    color: #33ff33;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 16px;
+    line-height: 1.6;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow: hidden;
+  }
 
-      main {
-        max-width: 42rem;
-        padding: 2rem;
-        text-align: center;
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Web server is running</h1>
-      <p>This static page is served by Nginx in Docker on an AWS EC2 instance
-            through Route53 with ACM (hopefully) and GoDaddy, deployed via github actions and managed by Terraform.</p>
-    </main>
-  </body>
+  #header {
+    width: 100%;
+    max-width: 860px;
+    padding: 12px 24px 6px;
+    color: #888;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
+  }
+
+  #terminal {
+    width: 100%;
+    max-width: 860px;
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    outline: none;
+  }
+
+  #terminal::-webkit-scrollbar { width: 6px; }
+  #terminal::-webkit-scrollbar-track { background: #0d0d0d; }
+  #terminal::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  #output { display: inline; }
+
+  #cursor {
+    display: inline-block;
+    width: 9px;
+    height: 1em;
+    background: #33ff33;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+    margin-left: 1px;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  #hint {
+    position: fixed;
+    top: 38px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #2a5a2a;
+    font-size: 24px;
+    pointer-events: none;
+    transition: opacity 1s;
+  }
+
+  #hint.hidden { opacity: 0; }
+
+  .dim { color: #1e6e1e; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <span>roman@terminal ~ % poem</span>
+  <span id="counter">0 / 0</span>
+</div>
+
+<div id="terminal" tabindex="0">
+  <span id="output"></span><span id="cursor"></span>
+</div>
+
+<div id="hint">— press any key to begin typing —</div>
+
+<script>
+const poem = `Pan Roman – Master of Many Paths
+
+In halls of servers, clouds, and code,
+Where countless digital rivers flowed,
+There stands a man both calm and bright,
+Pan Roman, guiding day and night.`;
+
+const output   = document.getElementById('output');
+const counter  = document.getElementById('counter');
+const hint     = document.getElementById('hint');
+const terminal = document.getElementById('terminal');
+
+let pos        = 0;
+let started    = false;
+let cycleCount = 0;
+
+counter.textContent = `0 / ${poem.length}`;
+
+function renderChar(ch) {
+  // Newlines become actual line breaks; everything else is a text node
+  if (ch === '\n') {
+    output.appendChild(document.createElement('br'));
+  } else {
+    output.appendChild(document.createTextNode(ch));
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  // Ignore modifier-only keys and function keys
+  if (e.key.length > 1 && !['Enter', 'Space'].includes(e.key)) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+  if (!started) {
+    started = true;
+    hint.classList.add('hidden');
+  }
+
+  const ch = poem[pos];
+  renderChar(ch);
+
+  pos++;
+  counter.textContent = `${pos} / ${poem.length}`;
+
+  // Loop
+  if (pos >= poem.length) {
+    pos = 0;
+    cycleCount++;
+    // Visual separator between cycles
+    const sep = document.createTextNode('\n\n');
+    output.appendChild(sep);
+    output.appendChild(document.createElement('br'));
+    output.appendChild(document.createElement('br'));
+  }
+
+  // Auto-scroll to keep cursor visible
+  terminal.scrollTop = terminal.scrollHeight;
+});
+
+// Focus terminal so it feels immersive
+terminal.focus();
+</script>
+</body>
 </html>
-

@@ -13,3 +13,6 @@
 # Web App Hosting Environments
     Application will be hosted simple single EC2 instance with docker (nginx + static html).
     Don't enable any other unnecessary AWS resources. This is only for Demo.
+# TLS
+    TLS Is going to be enabled using this flow: Browser ── HTTPS ── AWS service + ACM certificate ── HTTP ── Nginx 
+    with existing Route53 hosted zone panroman.pl (managed manually via same aws account outside of this project) and ALB.
