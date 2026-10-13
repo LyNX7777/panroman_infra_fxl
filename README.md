@@ -1,4 +1,4 @@
-# SimpleProj1: Terraform AWS demo web hosting
+# SimpleProj: Terraform AWS demo web hosting
 
 This repository provisions a deliberately small public web application on AWS:
 
