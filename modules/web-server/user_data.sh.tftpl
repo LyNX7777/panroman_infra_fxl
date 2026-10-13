@@ -1,0 +1,19 @@
+#!/bin/bash
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+install -d -m 0755 /opt/simpleproj1
+echo '${index_html_base64}' | base64 --decode > /opt/simpleproj1/index.html
+chmod 0644 /opt/simpleproj1/index.html
+
+docker pull nginx:stable-alpine
+docker run \
+  --detach \
+  --name simpleproj1-nginx \
+  --publish 80:80 \
+  --restart unless-stopped \
+  --volume /opt/simpleproj1:/usr/share/nginx/html:ro,Z \
+  nginx:stable-alpine
+

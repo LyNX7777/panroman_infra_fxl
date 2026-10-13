@@ -1,0 +1,18 @@
+aws_account_id    = "123456789012"
+aws_profile       = "my-aws-profile"
+github_repository = "my-github-owner/simpleproj1"
+
+# Required for GitHub's immutable OIDC subject format (new repositories since
+# July 15, 2026, and repositories that opted in, were renamed, or transferred).
+# Get these values from https://api.github.com/repos/OWNER/REPOSITORY:
+# owner_id is owner.id; repository_id is id. Replace both example values.
+github_repository_ids = {
+  owner_id      = "12345678"
+  repository_id = "987654321"
+}
+# For a repository still using legacy name-only subjects, omit this object.
+
+# Optional overrides:
+# aws_region    = "eu-central-1"
+# github_branch = "main"
+# project_name  = "simpleproj1"
